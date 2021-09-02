@@ -1,21 +1,46 @@
 pipeline {
-    agent any
-
-    stages {
-        stage('Build') {
+   agent any
+    environment {
+      RELEASE='20.04'
+    }
+   stages {
+      stage('Build') {
+            environment {
+               LOG_LEVEL='INFO'
+            }
             steps {
-                echo 'Building..'
+               echo "Building release ${RELEASE} with log level ${LOG_LEVEL}..."
+               sh 'chmod +x m2/demo3/build.sh'
+               withCredentials([string(credentialsId: 'an-api-key', variable: 'API_KEY')]) {
+                  sh '''
+                     ./m2/demo3/build.sh
+                  '''
+               }
             }
         }
         stage('Test') {
             steps {
-                echo 'Testing..'
+               echo "Testing release ${RELEASE}"
+               script {
+                  if (Math.random() > 0.5) {
+                     throw new Exception()
+                  }
+               }
+               writeFile file: 'test-results.txt', text: 'passed'               
             }
         }
-        stage('Deploy') {
-            steps {
-                echo 'Deploying....'
-            }
-        }
-    }
+   }
+   post {
+      success {
+         archiveArtifacts 'test-results.txt'
+         slackSend channel: '#builds',
+                   color: 'good',
+                   message: "Release ${env.RELEASE}, success: ${currentBuild.fullDisplayName}."
+      }
+      failure {
+         slackSend channel: '#builds',
+                   color: 'danger',
+                   message: "Release ${env.RELEASE}, FAILED: ${currentBuild.fullDisplayName}."
+      }
+   }
 }
